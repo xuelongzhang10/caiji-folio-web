@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-alt: #f1f3f6;
+  --border: #e4e7ec;
+  --text: #1b1f27;
+  --text-muted: #6b7280;
+  --text-subtle: #9aa1ac;
+  --brand: #0f766e;
+  --brand-strong: #0b5c56;
+  --brand-soft: rgba(15, 118, 110, 0.1);
+  --up: #0f9d58;
+  --down: #e5484d;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-alt: #1c212a;
+    --border: #262c37;
+    --text: #edeff2;
+    --text-muted: #9aa3b2;
+    --text-subtle: #6b7280;
+    --brand: #2dd4bf;
+    --brand-strong: #5eead4;
+    --brand-soft: rgba(45, 212, 191, 0.14);
+    --up: #34d399;
+    --down: #f87171;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--brand-soft);
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}

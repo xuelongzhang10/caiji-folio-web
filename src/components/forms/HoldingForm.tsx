@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { v4 as uuid } from 'uuid'
-import type { AssetClass, CurrencyCode, Holding, Market } from '../../types'
+import type { AssetClass, Broker, CurrencyCode, Holding, Market } from '../../types'
 import { CURRENCIES, MARKET_LABEL } from '../../types'
 import { Button, Field, inputClass } from '../ui'
 import { MARKET_SYMBOL_HINT } from '../../lib/quotes'
@@ -10,11 +10,15 @@ const MARKETS: Market[] = ['A', 'HK', 'US', 'DE', 'UK', 'OTHER']
 export default function HoldingForm({
   assetClass,
   initial,
+  brokers,
+  defaultBrokerId,
   onSubmit,
   onCancel,
 }: {
   assetClass: AssetClass
   initial?: Holding
+  brokers: Broker[]
+  defaultBrokerId?: string
   onSubmit: (h: Holding) => void
   onCancel: () => void
 }) {
@@ -25,6 +29,7 @@ export default function HoldingForm({
   const [costPrice, setCostPrice] = useState(String(initial?.costPrice ?? ''))
   const [currentPrice, setCurrentPrice] = useState(String(initial?.currentPrice ?? ''))
   const [currency, setCurrency] = useState<CurrencyCode>(initial?.currency ?? 'CNY')
+  const [brokerId, setBrokerId] = useState(initial?.brokerId ?? defaultBrokerId ?? '')
   const [note, setNote] = useState(initial?.note ?? '')
 
   const isCashLike = assetClass === 'cash' || assetClass === 'custom'
@@ -37,6 +42,7 @@ export default function HoldingForm({
     const holding: Holding = {
       id: initial?.id ?? uuid(),
       assetClass,
+      brokerId: brokerId || undefined,
       name: name.trim(),
       symbol: symbol.trim() || undefined,
       market: assetClass === 'stock' ? market : undefined,
@@ -57,6 +63,19 @@ export default function HoldingForm({
       <Field label={assetClass === 'custom' ? '资产名称' : '名称'} hint={assetClass === 'custom' ? '如:上海某公寓、腕表收藏' : undefined}>
         <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required placeholder="例如 贵州茅台 / 沪深300ETF" />
       </Field>
+
+      {brokers.length > 0 && (
+        <Field label="所属目录(可选)" hint="按券商/账户分组,便于分别查看盈亏">
+          <select className={inputClass} value={brokerId} onChange={(e) => setBrokerId(e.target.value)}>
+            <option value="">未分类</option>
+            {brokers.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {assetClass === 'stock' && (
         <Field label="市场">

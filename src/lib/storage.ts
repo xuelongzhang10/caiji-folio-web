@@ -6,7 +6,8 @@ export function loadState(): AppState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as AppState
+    const parsed = JSON.parse(raw) as AppState
+    return { ...parsed, brokers: parsed.brokers ?? [], closedPositions: parsed.closedPositions ?? [] }
   } catch {
     return null
   }
@@ -30,6 +31,8 @@ export function defaultState(): AppState {
       baseCurrency: 'CNY',
       fxRates: { CNY: 1 },
     },
+    brokers: [],
+    closedPositions: [],
   }
 }
 
@@ -42,5 +45,5 @@ export function importStateFromJson(json: string): AppState {
   if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.holdings)) {
     throw new Error('无效的备份文件格式')
   }
-  return parsed as AppState
+  return { ...parsed, brokers: parsed.brokers ?? [], closedPositions: parsed.closedPositions ?? [] } as AppState
 }

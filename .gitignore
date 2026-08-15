@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Personal brokerage statements / derived holdings data — never commit real financial data
+/*.xlsx
+/*.xls
+/*.numbers
+/*.csv

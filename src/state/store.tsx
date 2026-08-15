@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { AppState, Dividend, Holding, PlanExecution, RecurringPlan } from '../types'
+import type { AppState, Broker, ClosedPosition, Dividend, Holding, PlanExecution, RecurringPlan } from '../types'
 import { defaultState, loadState, saveState } from '../lib/storage'
 import { upsertTodaySnapshot } from '../lib/calculations'
 import { fetchFxRates } from '../lib/quotes'
@@ -15,6 +15,12 @@ interface StoreApi {
   addPlan: (p: RecurringPlan) => void
   updatePlan: (p: RecurringPlan) => void
   removePlan: (id: string) => void
+  addBroker: (b: Broker) => void
+  updateBroker: (b: Broker) => void
+  removeBroker: (id: string) => void
+  addClosedPosition: (c: ClosedPosition) => void
+  updateClosedPosition: (c: ClosedPosition) => void
+  removeClosedPosition: (id: string) => void
   executePlan: (planId: string, execution: PlanExecution, newQuantity: number, newCostPrice: number) => void
   setBaseCurrency: (currency: string) => void
   refreshFxRates: () => Promise<void>
@@ -76,6 +82,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addPlan: (p) => setState((prev) => ({ ...prev, plans: [...prev.plans, p] })),
       updatePlan: (p) => setState((prev) => ({ ...prev, plans: prev.plans.map((x) => (x.id === p.id ? p : x)) })),
       removePlan: (id) => setState((prev) => ({ ...prev, plans: prev.plans.filter((x) => x.id !== id) })),
+      addBroker: (b) => setState((prev) => ({ ...prev, brokers: [...prev.brokers, b] })),
+      updateBroker: (b) =>
+        setState((prev) => ({ ...prev, brokers: prev.brokers.map((x) => (x.id === b.id ? b : x)) })),
+      removeBroker: (id) =>
+        setState((prev) => ({
+          ...prev,
+          brokers: prev.brokers.filter((x) => x.id !== id),
+          holdings: prev.holdings.map((h) => (h.brokerId === id ? { ...h, brokerId: undefined } : h)),
+          closedPositions: prev.closedPositions.map((c) => (c.brokerId === id ? { ...c, brokerId: undefined } : c)),
+        })),
+      addClosedPosition: (c) => setState((prev) => ({ ...prev, closedPositions: [...prev.closedPositions, c] })),
+      updateClosedPosition: (c) =>
+        setState((prev) => ({ ...prev, closedPositions: prev.closedPositions.map((x) => (x.id === c.id ? c : x)) })),
+      removeClosedPosition: (id) =>
+        setState((prev) => ({ ...prev, closedPositions: prev.closedPositions.filter((x) => x.id !== id) })),
       executePlan: (planId, execution, newQuantity, newCostPrice) =>
         setState((prev) => ({
           ...prev,

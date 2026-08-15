@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '../state/store'
-import { allocationByClass, holdingMarketValueBase, portfolioCostBase, portfolioTotalBase } from '../lib/calculations'
+import { allocationByClass, convertToBase, holdingMarketValueBase, portfolioCostBase, portfolioTotalBase } from '../lib/calculations'
 import { formatMoney, formatPercent } from '../lib/format'
 import { PageHeader, StatCard, Card, EmptyState, Button } from '../components/ui'
 import AllocationPie from '../components/charts/AllocationPie'
@@ -10,12 +10,17 @@ import { ASSET_CLASS_LABEL, MARKET_LABEL } from '../types'
 
 export default function Dashboard() {
   const { state } = useStore()
-  const { holdings, settings, snapshots, dividends } = state
+  const { holdings, closedPositions, settings, snapshots, dividends } = state
 
   const total = portfolioTotalBase(holdings, settings)
   const cost = portfolioCostBase(holdings, settings)
-  const pnl = total - cost
-  const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0
+  const holdingsPnl = total - cost
+  const closedPnl = useMemo(
+    () => closedPositions.reduce((sum, c) => sum + convertToBase(c.realizedPnl, c.currency, settings), 0),
+    [closedPositions, settings],
+  )
+  const pnl = holdingsPnl + closedPnl
+  const pnlPercent = cost > 0 ? (holdingsPnl / cost) * 100 : 0
   const allocation = useMemo(() => allocationByClass(holdings, settings), [holdings, settings])
 
   const ytdDividends = useMemo(() => {
@@ -34,7 +39,7 @@ export default function Dashboard() {
     [holdings, settings],
   )
 
-  if (holdings.length === 0) {
+  if (holdings.length === 0 && closedPositions.length === 0) {
     return (
       <div>
         <PageHeader title="总览" subtitle="欢迎使用财记 Folio" />
@@ -62,7 +67,11 @@ export default function Dashboard() {
         <StatCard
           label="累计盈亏"
           value={formatMoney(pnl, settings.baseCurrency)}
-          sub={formatPercent(pnlPercent)}
+          sub={
+            closedPnl !== 0
+              ? `持仓 ${formatMoney(holdingsPnl, settings.baseCurrency)} · 已清仓 ${formatMoney(closedPnl, settings.baseCurrency)}`
+              : formatPercent(pnlPercent)
+          }
           tone={pnl >= 0 ? 'up' : 'down'}
         />
         <StatCard label="持仓数量" value={String(holdings.length)} />

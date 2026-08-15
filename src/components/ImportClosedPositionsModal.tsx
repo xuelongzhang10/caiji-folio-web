@@ -1,58 +1,60 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
-import type { AssetClass, Broker, CurrencyCode, Holding, Market } from '../types'
+import type { Broker, ClosedPosition, CurrencyCode, Market } from '../types'
 import { CURRENCIES, MARKET_LABEL } from '../types'
 import { Button, Field, Modal, inputClass } from './ui'
 import {
   guessColumnMapping,
-  guessYahooSymbolForAShare,
   normalizeMarket,
   parseImportFile,
   parseImportNumber,
-  COLUMN_ALIASES,
-  IMPORT_FIELD_LABEL,
-  IMPORT_FIELD_REQUIRED,
-  type ImportField,
+  CLOSED_COLUMN_ALIASES,
+  CLOSED_IMPORT_FIELD_LABEL,
+  CLOSED_IMPORT_FIELD_REQUIRED,
+  type ClosedImportField,
   type ParsedTable,
 } from '../lib/importParser'
 
-const FIELDS: ImportField[] = ['symbol', 'name', 'quantity', 'costPrice', 'currentPrice', 'market']
+const FIELDS: ClosedImportField[] = ['symbol', 'name', 'buyQuantity', 'sellQuantity', 'realizedPnl', 'market', 'lastDate']
 const MARKETS: Market[] = ['A', 'HK', 'US', 'DE', 'UK', 'OTHER']
 
 interface ParsedRow {
   index: number
   symbol: string
   name: string
-  quantity: number
-  costPrice: number
-  currentPrice?: number
+  buyQuantity?: number
+  sellQuantity: number
+  realizedPnl: number
   market: Market
+  lastDate?: string
   valid: boolean
 }
 
-export default function ImportHoldingsModal({
+function normalizeDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  const s = raw.trim()
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+  return s
+}
+
+export default function ImportClosedPositionsModal({
   open,
   onClose,
   onImport,
   brokers,
   defaultBrokerId,
-  existingHoldings,
 }: {
   open: boolean
   onClose: () => void
-  onImport: (holdings: Holding[], mergeMode: boolean, syncMode: boolean) => void
+  onImport: (positions: ClosedPosition[]) => void
   brokers: Broker[]
   defaultBrokerId?: string
-  existingHoldings: Holding[]
 }) {
   const [table, setTable] = useState<ParsedTable | null>(null)
-  const [mapping, setMapping] = useState<Partial<Record<ImportField, number>>>({})
-  const [assetClass, setAssetClass] = useState<AssetClass>('stock')
+  const [mapping, setMapping] = useState<Partial<Record<ClosedImportField, number>>>({})
   const [defaultMarket, setDefaultMarket] = useState<Market>('A')
   const [currency, setCurrency] = useState<CurrencyCode>('CNY')
   const [brokerId, setBrokerId] = useState(defaultBrokerId ?? '')
-  const [mergeMode, setMergeMode] = useState(true)
-  const [syncMode, setSyncMode] = useState(false)
   const [excluded, setExcluded] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -67,7 +69,6 @@ export default function ImportHoldingsModal({
     setMapping({})
     setExcluded(new Set())
     setError(null)
-    setSyncMode(false)
   }
 
   function handleClose() {
@@ -81,10 +82,10 @@ export default function ImportHoldingsModal({
     try {
       const parsed = await parseImportFile(file)
       if (parsed.headers.length === 0 || parsed.rows.length === 0) {
-        throw new Error('未能从文件中解析出数据,请确认文件包含表头和至少一行持仓数据')
+        throw new Error('未能从文件中解析出数据,请确认文件包含表头和至少一行记录')
       }
       setTable(parsed)
-      setMapping(guessColumnMapping(parsed.headers, COLUMN_ALIASES))
+      setMapping(guessColumnMapping(parsed.headers, CLOSED_COLUMN_ALIASES))
       setExcluded(new Set())
     } catch (e) {
       setError(e instanceof Error ? e.message : '文件解析失败')
@@ -96,35 +97,23 @@ export default function ImportHoldingsModal({
   const parsedRows = useMemo<ParsedRow[]>(() => {
     if (!table) return []
     return table.rows.map((row, index) => {
-      const get = (f: ImportField) => (mapping[f] !== undefined ? row[mapping[f] as number] : undefined)
+      const get = (f: ClosedImportField) => (mapping[f] !== undefined ? row[mapping[f] as number] : undefined)
       const symbol = (get('symbol') ?? '').trim()
       const name = (get('name') ?? '').trim()
-      const quantity = parseImportNumber(get('quantity'))
-      const costPrice = parseImportNumber(get('costPrice'))
-      const currentRaw = get('currentPrice')
-      const currentPrice = currentRaw ? parseImportNumber(currentRaw) : undefined
+      const buyRaw = get('buyQuantity')
+      const buyQuantity = buyRaw ? parseImportNumber(buyRaw) : undefined
+      const sellQuantity = parseImportNumber(get('sellQuantity'))
+      const realizedPnl = parseImportNumber(get('realizedPnl'))
       const market = normalizeMarket(get('market')) ?? defaultMarket
-      const valid = name !== '' && quantity > 0 && costPrice >= 0
-      return { index, symbol, name, quantity, costPrice, currentPrice, market, valid }
+      const lastDate = normalizeDate(get('lastDate'))
+      const valid = name !== '' && sellQuantity > 0
+      return { index, symbol, name, buyQuantity, sellQuantity, realizedPnl, market, lastDate, valid }
     })
   }, [table, mapping, defaultMarket])
 
-  const missingRequired = FIELDS.filter((f) => IMPORT_FIELD_REQUIRED[f] && mapping[f] === undefined)
+  const missingRequired = FIELDS.filter((f) => CLOSED_IMPORT_FIELD_REQUIRED[f] && mapping[f] === undefined)
   const includedRows = parsedRows.filter((r) => r.valid && !excluded.has(r.index))
   const invalidCount = parsedRows.filter((r) => !r.valid).length
-
-  function resolveSymbol(r: ParsedRow): string | undefined {
-    return assetClass === 'stock' && r.market === 'A' && r.symbol ? (guessYahooSymbolForAShare(r.symbol) ?? r.symbol) : r.symbol || undefined
-  }
-
-  const wouldDelete = useMemo(() => {
-    if (!syncMode) return []
-    const importedSymbols = new Set(includedRows.map(resolveSymbol).filter(Boolean))
-    return existingHoldings.filter(
-      (h) => h.assetClass === assetClass && h.brokerId === (brokerId || undefined) && !(h.symbol && importedSymbols.has(h.symbol)),
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncMode, includedRows, existingHoldings, assetClass, brokerId])
 
   function toggleRow(index: number) {
     setExcluded((prev) => {
@@ -136,35 +125,30 @@ export default function ImportHoldingsModal({
   }
 
   function handleImportClick() {
-    const holdings: Holding[] = includedRows.map((r) => {
-      const symbol = resolveSymbol(r)
-      return {
-        id: uuid(),
-        assetClass,
-        brokerId: brokerId || undefined,
-        name: r.name,
-        symbol,
-        market: assetClass === 'stock' ? r.market : undefined,
-        quantity: r.quantity,
-        costPrice: r.costPrice,
-        currency,
-        currentPrice: r.currentPrice,
-        priceSource: 'manual',
-        note: r.symbol ? `导入自文件 · 原始代码 ${r.symbol}` : '导入自文件',
-        createdAt: new Date().toISOString(),
-      }
-    })
-    onImport(holdings, mergeMode, syncMode)
+    const positions: ClosedPosition[] = includedRows.map((r) => ({
+      id: uuid(),
+      brokerId: brokerId || undefined,
+      name: r.name,
+      symbol: r.symbol || undefined,
+      market: r.market,
+      currency,
+      buyQuantity: r.buyQuantity,
+      sellQuantity: r.sellQuantity,
+      realizedPnl: r.realizedPnl,
+      lastDate: r.lastDate,
+      note: r.symbol ? `导入自文件 · 原始代码 ${r.symbol}` : '导入自文件',
+      createdAt: new Date().toISOString(),
+    }))
+    onImport(positions)
     handleClose()
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="导入持仓 (CSV / Excel)" width={780}>
+    <Modal open={open} onClose={handleClose} title="导入已清仓记录 (CSV / Excel)" width={780}>
       {!table ? (
         <div>
           <p className="text-sm text-[var(--text-muted)] mb-4">
-            支持从同花顺、东方财富、中信证券等国内券商软件导出的持仓文件(CSV / XLS / XLSX)。国内券商大多不提供个人可直接调用的持仓查询
-            API,请在券商 App 或交易软件中导出「持仓/资金股份」明细文件后在此上传。
+            适用于已经完全卖出、只是想留一份"赚了多少/亏了多少"记录的股票或基金。至少需要名称、卖出数量、已实现盈亏三列。
           </p>
           <div
             className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center cursor-pointer hover:border-[var(--brand)] transition-colors"
@@ -196,12 +180,6 @@ export default function ImportHoldingsModal({
       ) : (
         <div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-            <Field label="导入为">
-              <select className={inputClass} value={assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)}>
-                <option value="stock">股票</option>
-                <option value="fund">基金</option>
-              </select>
-            </Field>
             <Field label="默认市场" hint="文件中若有市场列则优先使用">
               <select className={inputClass} value={defaultMarket} onChange={(e) => setDefaultMarket(e.target.value as Market)}>
                 {MARKETS.map((m) => (
@@ -240,8 +218,8 @@ export default function ImportHoldingsModal({
               {FIELDS.map((f) => (
                 <label key={f} className="block">
                   <span className="block text-[11px] text-[var(--text-subtle)] mb-1">
-                    {IMPORT_FIELD_LABEL[f]}
-                    {IMPORT_FIELD_REQUIRED[f] && <span className="text-[var(--down)]"> *</span>}
+                    {CLOSED_IMPORT_FIELD_LABEL[f]}
+                    {CLOSED_IMPORT_FIELD_REQUIRED[f] && <span className="text-[var(--down)]"> *</span>}
                   </span>
                   <select
                     className={inputClass}
@@ -262,44 +240,15 @@ export default function ImportHoldingsModal({
             </div>
             {missingRequired.length > 0 && (
               <div className="text-xs text-[var(--down)] mt-2">
-                请为以下必填字段选择对应列:{missingRequired.map((f) => IMPORT_FIELD_LABEL[f]).join('、')}
+                请为以下必填字段选择对应列:{missingRequired.map((f) => CLOSED_IMPORT_FIELD_LABEL[f]).join('、')}
               </div>
             )}
           </div>
 
           <div className="mb-3">
-            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <div className="text-xs font-medium text-[var(--text-muted)]">
-                预览({includedRows.length}/{parsedRows.length} 项将导入{invalidCount > 0 ? `,${invalidCount} 项数据不完整已自动跳过` : ''})
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-                  <input type="checkbox" checked={mergeMode} disabled={syncMode} onChange={(e) => setMergeMode(e.target.checked)} />
-                  代码已存在时更新持仓(否则新增)
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-[var(--down)]">
-                  <input
-                    type="checkbox"
-                    checked={syncMode}
-                    onChange={(e) => {
-                      setSyncMode(e.target.checked)
-                      if (e.target.checked) setMergeMode(true)
-                    }}
-                  />
-                  同步:删除这批里没有的现有持仓
-                </label>
-              </div>
+            <div className="text-xs font-medium text-[var(--text-muted)] mb-2">
+              预览({includedRows.length}/{parsedRows.length} 项将导入{invalidCount > 0 ? `,${invalidCount} 项数据不完整已自动跳过` : ''})
             </div>
-            {syncMode && (
-              <div className="text-xs text-[var(--down)] bg-[var(--down)]/10 rounded-lg px-3 py-2 mb-2">
-                {wouldDelete.length > 0
-                  ? `同步后将删除 ${wouldDelete.length} 条现有持仓(同目录、同类别,但不在本次导入范围内):${wouldDelete
-                      .slice(0, 5)
-                      .map((h) => h.name)
-                      .join('、')}${wouldDelete.length > 5 ? ' 等' : ''}`
-                  : '同目录、同类别下的现有持仓都在本次导入范围内,不会有删除发生'}
-              </div>
-            )}
             <div className="border border-[var(--border)] rounded-lg overflow-auto max-h-64 scroll-thin">
               <table className="w-full text-xs">
                 <thead className="bg-[var(--surface-alt)] sticky top-0">
@@ -307,9 +256,9 @@ export default function ImportHoldingsModal({
                     <th className="p-2 text-left w-8"></th>
                     <th className="p-2 text-left">代码</th>
                     <th className="p-2 text-left">名称</th>
-                    <th className="p-2 text-right">数量</th>
-                    <th className="p-2 text-right">成本价</th>
-                    <th className="p-2 text-right">现价</th>
+                    <th className="p-2 text-right">买入数量</th>
+                    <th className="p-2 text-right">卖出数量</th>
+                    <th className="p-2 text-right">已实现盈亏</th>
                     <th className="p-2 text-left">市场</th>
                   </tr>
                 </thead>
@@ -326,9 +275,9 @@ export default function ImportHoldingsModal({
                       </td>
                       <td className="p-2 num">{r.symbol || '—'}</td>
                       <td className="p-2">{r.name || '—'}</td>
-                      <td className="p-2 text-right num">{r.quantity || '—'}</td>
-                      <td className="p-2 text-right num">{r.costPrice || '—'}</td>
-                      <td className="p-2 text-right num">{r.currentPrice ?? '—'}</td>
+                      <td className="p-2 text-right num">{r.buyQuantity ?? '—'}</td>
+                      <td className="p-2 text-right num">{r.sellQuantity || '—'}</td>
+                      <td className="p-2 text-right num">{r.realizedPnl}</td>
                       <td className="p-2">{MARKET_LABEL[r.market]}</td>
                     </tr>
                   ))}

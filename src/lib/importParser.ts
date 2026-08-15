@@ -28,13 +28,45 @@ export const IMPORT_FIELD_REQUIRED: Record<ImportField, boolean> = {
 }
 
 // Common header text used by 同花顺 / 东方财富 / 中信证券等国内券商软件导出的持仓文件。
-const COLUMN_ALIASES: Record<ImportField, string[]> = {
+export const COLUMN_ALIASES: Record<ImportField, string[]> = {
   symbol: ['证券代码', '股票代码', '基金代码', '代码', '证券编号', 'symbol', 'code'],
   name: ['证券名称', '股票名称', '基金名称', '名称', 'name'],
   quantity: ['证券数量', '股票余额', '基金份额', '持仓数量', '股份余额', '持仓股数', '数量', 'quantity'],
   costPrice: ['成本价', '摊薄成本价', '参考成本价', '成本单价', '持仓成本价', '成本', 'cost'],
   currentPrice: ['现价', '最新价', '市价', '当前价', '最新价格', 'price'],
   market: ['交易市场', '市场', '交易所', 'market'],
+}
+
+export type ClosedImportField = 'symbol' | 'name' | 'buyQuantity' | 'sellQuantity' | 'realizedPnl' | 'market' | 'lastDate'
+
+export const CLOSED_IMPORT_FIELD_LABEL: Record<ClosedImportField, string> = {
+  symbol: '证券代码(可选)',
+  name: '证券名称',
+  buyQuantity: '累计买入数量(可选)',
+  sellQuantity: '累计卖出数量',
+  realizedPnl: '已实现盈亏',
+  market: '交易市场(可选)',
+  lastDate: '最后交易日期(可选)',
+}
+
+export const CLOSED_IMPORT_FIELD_REQUIRED: Record<ClosedImportField, boolean> = {
+  symbol: false,
+  name: true,
+  buyQuantity: false,
+  sellQuantity: true,
+  realizedPnl: true,
+  market: false,
+  lastDate: false,
+}
+
+export const CLOSED_COLUMN_ALIASES: Record<ClosedImportField, string[]> = {
+  symbol: ['证券代码', '股票代码', '代码', 'symbol', 'code'],
+  name: ['证券名称', '股票名称', '名称', 'name'],
+  buyQuantity: ['累计买入数量', '买入数量', '买入股数'],
+  sellQuantity: ['累计卖出数量', '卖出数量', '卖出股数', '清仓数量'],
+  realizedPnl: ['已实现盈亏(cny)', '已实现盈亏', '实现盈亏', '盈亏'],
+  market: ['交易市场', '市场', '交易所', 'market'],
+  lastDate: ['最后卖出日期', '最后交易日期', '卖出日期', '清仓日期', 'date'],
 }
 
 /** Read a File (.csv/.xls/.xlsx) into a plain header+rows table. */
@@ -78,11 +110,14 @@ function decodeCsvBytes(buf: ArrayBuffer): string {
   }
 }
 
-export function guessColumnMapping(headers: string[]): Partial<Record<ImportField, number>> {
-  const mapping: Partial<Record<ImportField, number>> = {}
+export function guessColumnMapping<F extends string>(
+  headers: string[],
+  aliasMap: Record<F, string[]>,
+): Partial<Record<F, number>> {
+  const mapping: Partial<Record<F, number>> = {}
   const normalized = headers.map((h) => h.trim().toLowerCase())
-  for (const field of Object.keys(COLUMN_ALIASES) as ImportField[]) {
-    const aliases = COLUMN_ALIASES[field].map((a) => a.toLowerCase())
+  for (const field of Object.keys(aliasMap) as F[]) {
+    const aliases = aliasMap[field].map((a) => a.toLowerCase())
     const idx = normalized.findIndex((h) => aliases.some((a) => h === a || h.includes(a)))
     if (idx !== -1) mapping[field] = idx
   }

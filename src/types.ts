@@ -25,6 +25,7 @@ export type CurrencyCode = (typeof CURRENCIES)[number]
 export interface Holding {
   id: string
   assetClass: AssetClass
+  brokerId?: string
   name: string
   symbol?: string
   market?: Market
@@ -34,6 +35,28 @@ export interface Holding {
   currentPrice?: number
   priceUpdatedAt?: string
   priceSource: 'manual' | 'api'
+  note?: string
+  createdAt: string
+}
+
+export interface Broker {
+  id: string
+  name: string
+  createdAt: string
+}
+
+export interface ClosedPosition {
+  id: string
+  brokerId?: string
+  name: string
+  symbol?: string
+  market?: Market
+  currency: CurrencyCode
+  buyQuantity?: number
+  sellQuantity: number
+  realizedPnl: number
+  firstDate?: string
+  lastDate?: string
   note?: string
   createdAt: string
 }
@@ -90,4 +113,6 @@ export interface AppState {
   plans: RecurringPlan[]
   snapshots: Snapshot[]
   settings: Settings
+  brokers: Broker[]
+  closedPositions: ClosedPosition[]
 }

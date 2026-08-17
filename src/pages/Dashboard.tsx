@@ -27,8 +27,8 @@ export default function Dashboard() {
     const year = new Date().getFullYear()
     return dividends
       .filter((d) => new Date(d.date).getFullYear() === year)
-      .reduce((sum, d) => sum + (d.currency === settings.baseCurrency ? d.amount : d.amount), 0)
-  }, [dividends, settings.baseCurrency])
+      .reduce((sum, d) => sum + convertToBase(d.amount, d.currency, settings), 0)
+  }, [dividends, settings])
 
   const topHoldings = useMemo(
     () =>
